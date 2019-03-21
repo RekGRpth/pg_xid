@@ -1,3 +1,4 @@
+#include <postgres.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +6,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <openssl/md5.h>
+#include <utils/backend_random.h>
+
 
 #include "xid.h"
 
@@ -15,6 +18,17 @@ static const char * encoding = "0123456789abcdefghijklmnopqrstuv";
 static uint32_t id_counter;
 static pid_t pid;
 static unsigned char hostname[3];
+
+static inline uint32_t random_uint32(void)
+{
+  uint32_t r;
+  if (!pg_backend_random((char*)&r, sizeof(r)))
+  {
+    elog(ERROR, "xid: pg_backend_random failed!");
+    return 0;
+  }
+  return r;
+}
 
 /* Swap Endianness */
 static inline uint32_t
@@ -28,7 +42,7 @@ xid_init() {
 	unsigned char * name_md5;
 
 	name_md5 = malloc(MD5_DIGEST_LENGTH);
-	id_counter = arc4random();
+	id_counter = random_uint32();
 
 	// Hostname md5
 	gethostname((char*)name, XID_HOSTNAME_MAX);
@@ -46,11 +60,12 @@ extern unsigned char *
 xid_generate() {
 	unsigned char id[XID_RAW_LEN];
 	unsigned char* result;
+	uint32_t t;
 
 	result = malloc(sizeof(id));
 	
 	// Timestamp
-	uint32_t t = time(NULL);
+	t = time(NULL);
 	t = swap_endian(t);
 	memcpy(&id, &t, 4);
 	
